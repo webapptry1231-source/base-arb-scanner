@@ -1,0 +1,130 @@
+You are rebuilding the Base chain flash-loan arbitrage scanner EXACTLY according to the MASTERPLAN.md in this project.
+This is a REPAIR BUILD — a V1 codebase already exists with 12 confirmed bugs listed below. You must fix every one of them.
+
+================================================================================
+STRICT RULES — NEVER DEVIATE
+================================================================================
+- Use EXACT function names, class names, variable names, constants from the masterplan.
+- Never rename anything. Never add or remove anything unless the masterplan explicitly allows it.
+- Build ONE file at a time. Wait for my "NEXT" command after each ✅ approval.
+
+================================================================================
+REVIEW & VALIDATION LOOP (mandatory for every file)
+================================================================================
+1. Write the complete corrected code for the requested file.
+2. Do a FULL self-review comparing every line against the masterplan AND the bug list below.
+3. List every possible bug, naming mismatch, missing import, or logic error.
+4. Fix everything until the code is 100% production-ready.
+5. Only then save the file.
+6. Output: "✅ FILE APPROVED - production-ready and fully matches masterplan"
+
+You are NOT allowed to say the file is done until the self-review confirms zero issues.
+
+================================================================================
+12 CONFIRMED BUGS TO FIX — READ ALL BEFORE TOUCHING ANY FILE
+================================================================================
+
+BUG 1 — config.py: Missing AAVE_V3_POOL module-level constant.
+  aave_v3_fl.py does: from config import AAVE_V3_POOL
+  But config.py never exports AAVE_V3_POOL as a top-level name.
+  FIX: Add   AAVE_V3_POOL = CONFIG["aave_v3_pool"]   after the FL_SOURCES block.
+
+BUG 2 — main.py: _flashloan_checker uses run_until_complete() inside a running event loop.
+  asyncio.get_event_loop().run_until_complete() inside an async runtime = RuntimeError crash.
+  FIX: Replace the sync _flashloan_checker method with a standalone async function
+  async_flashloan_checker(token, amount, balancer_fl, aave_fl) that awaits both checks.
+  Pass this coroutine-based checker to ScannerEngine properly.
+
+BUG 3 — scanner.py: _evaluate_candidate calls self._flashloan_checker.check_availability(...)
+  But _flashloan_checker is a bound method / function, not an object with .check_availability().
+  FIX: Call it as:  fl_source = await self._flashloan_checker(token_in, borrow_amount)
+  The flashloan checker must be an async callable, not a duck-typed object.
+
+BUG 4 — scanner.py + simulator.py: borrow_amount is never computed before simulation.
+  candidate.get("borrow_amount", 0) always returns 0 → simulation is always invalid.
+  FIX: Before calling the simulator, compute borrow_amount using compute_optimal_borrow_amount()
+  from simulation/slippage_model.py:
+    pool_tvl = reserves.get(first_pool_addr, {}).get("tvl_usd", 10_000)
+    candidate["borrow_amount"] = compute_optimal_borrow_amount(pool_tvl)
+
+BUG 5 — dex/registry.py: PancakeSwap V3 is mapped to AERODROME_FACTORY (completely wrong).
+  Also: Aerodrome and Curve adapters are never registered — both are required by the masterplan.
+  FIX:
+    - Add PANCAKESWAP_V3_FACTORY to config.py (discover dynamically or use known Base address).
+    - Register pancakeswap_v3 with its correct factory.
+    - Register aerodrome using UniswapV3Adapter with AERODROME_FACTORY (SlipStream is V3-style).
+    - Register curve with CurveAdapter and known Base Curve registry addresses.
+  Known Base addresses to add to config.py:
+    PANCAKESWAP_V3_FACTORY = "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865"
+    CURVE_REGISTRY_BASE    = "0x5ffe7FB82894076ECB99A30D6A32e969e6e35E98"
+
+BUG 6 — price/dfs_paths.py: Optional is used in the function signature but never imported.
+  FIX: Add   from typing import Dict, List, Any, Set, Optional   at the top of the file.
+
+BUG 7 — flashloan/balancer_fl.py: getInternalBalance ABI is wrong.
+  Real Balancer Vault function signature: getInternalBalance(address user, address[] tokens) → uint256[]
+  The single-token version does not exist. Every call will revert.
+  FIX: Replace liquidity check with a direct ERC20 balanceOf call on the vault address:
+    erc20 = w3.eth.contract(address=token, abi=ERC20_BALANCE_ABI)
+    balance = await erc20.functions.balanceOf(BALANCER_VAULT).call()
+  This correctly checks how much of the token the vault holds (available for flash loans).
+
+BUG 8 — flashloan/aave_v3_fl.py: Wrong ABI and wrong field index in getReserveData.
+  The real Aave V3 ReserveData struct has 'aTokenAddress' at index [7], not raw liquidity.
+  Available liquidity must be fetched via ERC20 balanceOf(aToken) or via
+  IERC20(asset).balanceOf(aToken_address).
+  FIX: Use getReserveData to get aTokenAddress (index 7), then:
+    erc20 = w3.eth.contract(address=token, abi=ERC20_BALANCE_ABI)
+    atoken_addr = reserve_data[7]
+    available = await erc20.functions.balanceOf(atoken_addr).call()
+  Also fix the ABI: interestRateStrategyAddress is type "address" not "uint8".
+
+BUG 9 — simulation/simulator.py: Stress test is incomplete.
+  Masterplan Section 11 requires THREE stress test passes before logging as profitable:
+    Test A: Re-simulate at -5% reserves (implemented).
+    Test B: Re-simulate with gas price 3× current.
+    Test C: Re-simulate with reserve change (swap one reserve by +2%).
+  FIX: Add Tests B and C to the stress_test() method. Only return True if all three pass.
+
+BUG 10 — data/logger.py + all modules: Two logging systems are fighting each other.
+  setup_logging() configures loguru, but every module uses logging.getLogger(__name__)
+  (stdlib). Loguru does not intercept stdlib logging by default → most logs are invisible.
+  FIX: In setup_logging(), add loguru's stdlib interception:
+    import logging
+    class InterceptHandler(logging.Handler):
+        def emit(self, record):
+            level = logger.level(record.levelname).name
+            logger.opt(depth=6, exception=record.exc_info).log(level, record.getMessage())
+    logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
+
+BUG 11 — discovery/subgraph_client.py: Deprecated The Graph hosted service URLs.
+  api.thegraph.com/subgraphs/name/... has been sunset. Queries will return 410/404.
+  FIX: Update SUBGRAPH_URLS to use The Graph's decentralized gateway or studio endpoints:
+    "uniswap_v3": "https://gateway.thegraph.com/api/{API_KEY}/subgraphs/id/HUZDsRpEVP2AvzDCyzDHtdc64dyDxx8FQjzsmqSg4H3B"
+    "balancer_v2": "https://gateway.thegraph.com/api/{API_KEY}/subgraphs/id/H9oPAbXnobBRq1cB3HDmbZ1E8MWQyJYQjT1QDJMrdbNp"
+  Add GRAPH_API_KEY to .env and config.py. If no API key, fall back to factory scan only
+  (subgraph is optional, factory scan is the fallback — already in pool_registry.py).
+
+BUG 12 — main.py: ScannerEngine receives flashloan_checker as a sync method wrapping async code.
+  This is the root cause of Bugs 2 and 3 combined. The entire flashloan checker pattern must
+  be redesigned as a clean async callable.
+  FIX: Define at module level in main.py:
+    async def make_flashloan_checker(balancer_fl, aave_fl):
+        async def check(token: str, amount: int) -> Optional[dict]:
+            if await balancer_fl.check_availability(token, amount):
+                return {"name": balancer_fl.name, "address": balancer_fl.address, "fee_rate": balancer_fl.fee_rate}
+            if await aave_fl.check_availability(token, amount):
+                return {"name": aave_fl.name, "address": aave_fl.address, "fee_rate": aave_fl.fee_rate}
+            return None
+        return check
+  Then in initialize():  self._flashloan_checker = make_flashloan_checker(self._balancer_fl, self._aave_fl)
+  And in scanner.py _evaluate_candidate:  fl_source = await self._flashloan_checker(token_in, borrow_amount)
+
+================================================================================
+Here is the complete MASTERPLAN:
+read MASTERPLAN.md
+================================================================================
+
+Start with: config.py (apply Bug 1 and Bug 5 fixes first — everything else depends on it).
+
+Build ONE file at a time. After each ✅ approval, wait for "NEXT".

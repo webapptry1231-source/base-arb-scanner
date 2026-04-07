@@ -1,0 +1,30 @@
+[
+  {
+    "inputs": [{"internalType": "bytes32", "name": "poolId", "type": "bytes32"}],
+    "name": "getPoolTokens",
+    "outputs": [
+      {"internalType": "contract IERC20[]", "name": "tokens", "type": "address[]"},
+      {"internalType": "uint256[]", "name": "balances", "type": "uint256[]"},
+      {"internalType": "uint256", "name": "lastChangeBlock", "type": "uint256"}
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{"internalType": "bytes32", "name": "poolId", "type": "bytes32"}],
+    "name": "getPool",
+    "outputs": [
+      {"internalType": "address", "name": "", "type": "address"},
+      {"internalType": "uint256", "name": "", "type": "uint256"}
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getPoolIds",
+    "outputs": [{"internalType": "bytes32[]", "name": "", "type": "bytes32[]"}],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

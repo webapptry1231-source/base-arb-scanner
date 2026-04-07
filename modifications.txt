@@ -1,0 +1,57 @@
+
+Do these **exactly in order**. After finishing one, test the file before moving to the next.
+
+1. **price/graph_builder.py**  
+   - Confirm `self._graph = nx.MultiDiGraph()` (already done).  
+   - In `build_graph()` and `update_edge()`: keep all edge attributes (`pool`, `dex`, `fee`, `token_in`, `token_out`, `rate`).
+
+2. **core/opportunity.py**  
+   - Change type hint in `find_opportunities` from `nx.DiGraph` to `nx.MultiDiGraph`.  
+   - In `_find_cross_exchange_opps`, `_find_bellman_ford_opps`, `_find_dfs_opps`:  
+     Replace `graph[current][neighbor]` with proper MultiDiGraph handling:  
+     ```python
+     edge_data = list(graph.get_edge_data(current, neighbor).values())[0]
+     ```
+   - In `_find_dfs_opps` and `_find_cross_exchange_opps`: update `graph.successors(current)` loop to handle multi-edges correctly.
+
+3. **price/bellman_ford.py**  
+   - Change type hint `nx.DiGraph` to `nx.MultiDiGraph`.  
+   - In `find_negative_cycles`: when building `cycle_edges`, use `list(G.get_edge_data(u, v).values())[0]` for each edge.
+
+4. **price/dfs_paths.py**  
+   - Change type hint `nx.DiGraph` to `nx.MultiDiGraph`.  
+   - In `find_dfs_paths`: replace `edge_data = G[current][neighbor]` with `edge_data = list(G.get_edge_data(current, neighbor).values())[0]`.
+
+5. **simulation/simulator.py**  
+   - In `_calc_step_amount_out()`:  
+     ```python
+     if "sqrtPriceX96" in reserves:
+         return calc_v3_amount_out(...)
+     ```
+   - In `simulate_flashloan_arb()`:  
+     Use `estimate_v3_slippage(current_amount, liquidity, fee)` when V3 detected.  
+   - Confirm `stress_test()` calls all three sub-tests (A, B, C) and returns True only if all pass.
+
+6. **simulation/slippage_model.py**  
+   - Update `estimate_slippage()` to accept optional `sqrtPriceX96` and `liquidity` params and route to `estimate_v3_slippage` when present.
+
+7. **price/reserve_fetcher.py**  
+   - Replace sequential calls with real Multicall3 batching (use `multicall` library as in masterplan Section 3).  
+   - Add support for V3 `slot0` + liquidity in batch.
+
+8. **dex/registry.py**  
+   - Confirm all 6 adapters are registered (Uniswap V3, Sushi V3, Pancake V3, Aerodrome, Balancer V2, Curve) with correct factories.
+
+9. **main.py**  
+   - Confirm `make_flashloan_checker` is used and `_flashloan_checker` is passed as async callable to `ScannerEngine`.
+
+10. **core/scanner.py**  
+    - In `_evaluate_candidate()`:  
+      - Compute `borrow_amount` using `compute_optimal_borrow_amount`.  
+      - Call `fl_source = await self._flashloan_checker(token_in, candidate["borrow_amount"])`.
+
+11. **data/logger.py**  
+    - Confirm full stdlib logging interception with `InterceptHandler` is active.
+
+12. **discovery/subgraph_client.py**  
+    - Confirm `GRAPH_API_KEY` handling and fallback to factory scan when key is missing.
