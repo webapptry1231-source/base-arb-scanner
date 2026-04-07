@@ -2,7 +2,7 @@ web3==6.15.0
 aiohttp==3.9.5
 multicall>=0.9.0
 networkx==3.3
-pandas==2.2.2
+pandas>=2.2.3
 python-dotenv==1.0.1
 rich==13.7.1
 loguru==0.7.2
