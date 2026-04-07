@@ -31,26 +31,44 @@ async def discover_all_pairs_v3(
     batch_size: int = 200,
     dex_name: str = "unknown",
 ) -> List[Dict[str, Any]]:
-    """Fixed version for Base Uniswap V3-style factories."""
+    """Improved discovery for Base V3 factories using events + poolCount fallback."""
     pools = []
+    factory = w3.eth.contract(address=factory_addr, abi=FACTORY_V3_ABI)
+    
     try:
-        # Base factories often don't expose poolCount reliably — use event logs instead
-        factory = w3.eth.contract(address=factory_addr, abi=FACTORY_V3_ABI)
-        # Get latest 1000 PoolCreated events as fallback
-        events = await factory.events.PoolCreated.get_logs(fromBlock="latest-1000")
-        logger.info(f"[{dex_name}] Found {len(events)} PoolCreated events")
+        # Try poolCount first
+        pool_count = await factory.functions.poolCount().call()
+        pool_count = int(pool_count)
+        logger.info(f"[{dex_name}] Factory reports {pool_count} pools")
         
-        for event in events:
-            pools.append({
-                "address": event.args.pool,
-                "token0": event.args.token0,
-                "token1": event.args.token1,
-                "fee": event.args.fee / 1_000_000,
-                "dex": dex_name,
-                "type": "v3",
-            })
-    except Exception as e:
-        logger.error(f"[{dex_name}] Factory discovery failed: {e}")
+        for i in range(0, min(pool_count, 500), batch_size):  # limit for speed
+            batch_end = min(i + batch_size, pool_count)
+            for j in range(i, batch_end):
+                try:
+                    pool_address = await factory.functions.allPools(j).call()
+                    pools.append({
+                        "address": pool_address,
+                        "dex": dex_name,
+                        "type": "v3",
+                    })
+                except Exception:
+                    continue
+    except Exception:
+        # Fallback to recent PoolCreated events
+        try:
+            events = await factory.events.PoolCreated.get_logs(fromBlock="latest-2000")
+            for event in events:
+                pools.append({
+                    "address": event.args.pool,
+                    "token0": event.args.token0,
+                    "token1": event.args.token1,
+                    "fee": getattr(event.args, 'fee', 3000) / 1_000_000,
+                    "dex": dex_name,
+                    "type": "v3",
+                })
+            logger.info(f"[{dex_name}] Found {len(events)} pools via PoolCreated events")
+        except Exception as e:
+            logger.error(f"[{dex_name}] All discovery methods failed: {e}")
     
     return pools
 
