@@ -37,6 +37,9 @@ class Database:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp TEXT NOT NULL,
                 block_number INTEGER NOT NULL,
+                rpc_provider TEXT NOT NULL DEFAULT '',
+                rpc_latency_ms REAL NOT NULL DEFAULT 0,
+                estimated_cu_used REAL NOT NULL DEFAULT 0,
                 route_type TEXT NOT NULL,
                 path TEXT NOT NULL,
                 dexes TEXT NOT NULL,
@@ -50,10 +53,14 @@ class Database:
                 gas_used INTEGER NOT NULL,
                 gas_cost_usd REAL NOT NULL,
                 net_profit_usd REAL NOT NULL,
+                net_after_25pct_buffer REAL NOT NULL DEFAULT 0,
                 slippage_applied REAL NOT NULL,
                 survived_blocks INTEGER DEFAULT 0,
                 simulation_pass INTEGER DEFAULT 0,
                 stress_test_pass INTEGER DEFAULT 0,
+                false_positive_flags TEXT DEFAULT '[]',
+                free_tier_throttled INTEGER DEFAULT 0,
+                log_uuid TEXT DEFAULT '',
                 raw_json TEXT
             )
         """)
@@ -105,6 +112,9 @@ class Database:
         row = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "block_number": result.get("block_number", 0),
+            "rpc_provider": result.get("rpc_provider", "unknown"),
+            "rpc_latency_ms": result.get("rpc_latency_ms", 0),
+            "estimated_cu_used": result.get("estimated_cu_used", 0),
             "route_type": candidate.get("type", "unknown"),
             "path": json.dumps(path),
             "dexes": json.dumps(dexes),
@@ -118,30 +128,38 @@ class Database:
             "gas_used": result.get("gas_used", 0),
             "gas_cost_usd": result.get("gas_cost_usd", 0),
             "net_profit_usd": result.get("net_profit_usd", 0),
+            "net_after_25pct_buffer": result.get("net_after_25pct_buffer", 0),
             "slippage_applied": result.get("slippage_applied", 0),
             "survived_blocks": result.get("survived_blocks", 0),
             "simulation_pass": 1 if result.get("simulation_pass") else 0,
             "stress_test_pass": 1 if result.get("stress_test_pass") else 0,
+            "false_positive_flags": json.dumps(result.get("false_positive_flags", [])),
+            "free_tier_throttled": 1 if result.get("free_tier_throttled") else 0,
+            "log_uuid": result.get("log_uuid", ""),
             "raw_json": json.dumps(result),
         }
 
         def _insert():
             self._conn.execute("""
                 INSERT INTO opportunities (
-                    timestamp, block_number, route_type, path, dexes, pools,
+                    timestamp, block_number, rpc_provider, rpc_latency_ms, estimated_cu_used,
+                    route_type, path, dexes, pools,
                     borrow_amount, borrow_token, fl_source, fl_fee_usd,
                     gross_profit_usd, swap_fees_usd, gas_used, gas_cost_usd,
-                    net_profit_usd, slippage_applied, survived_blocks,
-                    simulation_pass, stress_test_pass, raw_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    net_profit_usd, net_after_25pct_buffer, slippage_applied, survived_blocks,
+                    simulation_pass, stress_test_pass, false_positive_flags,
+                    free_tier_throttled, log_uuid, raw_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                row["timestamp"], row["block_number"], row["route_type"],
-                row["path"], row["dexes"], row["pools"],
+                row["timestamp"], row["block_number"], row["rpc_provider"],
+                row["rpc_latency_ms"], row["estimated_cu_used"],
+                row["route_type"], row["path"], row["dexes"], row["pools"],
                 row["borrow_amount"], row["borrow_token"], row["fl_source"],
                 row["fl_fee_usd"], row["gross_profit_usd"], row["swap_fees_usd"],
                 row["gas_used"], row["gas_cost_usd"], row["net_profit_usd"],
-                row["slippage_applied"], row["survived_blocks"],
-                row["simulation_pass"], row["stress_test_pass"], row["raw_json"],
+                row["net_after_25pct_buffer"], row["slippage_applied"], row["survived_blocks"],
+                row["simulation_pass"], row["stress_test_pass"], row["false_positive_flags"],
+                row["free_tier_throttled"], row["log_uuid"], row["raw_json"],
             ))
             self._conn.commit()
 

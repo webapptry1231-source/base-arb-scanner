@@ -14,7 +14,7 @@ def apply_quality_gates(
     """Filter pools through quality gates.
 
     Gates:
-    1. Minimum TVL >= $5,000
+    1. Minimum TVL >= $10,000
     2. At least one token is a major (WETH, USDC, USDT)
     3. Non-zero reserves/balances
     4. Non-zero liquidity

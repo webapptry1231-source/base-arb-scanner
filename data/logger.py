@@ -2,7 +2,6 @@ import sys
 import logging
 from loguru import logger
 
-
 LOG_FORMAT = (
     "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
     "<level>{level: <8}</level> | "
@@ -16,7 +15,7 @@ JSON_LOG_FORMAT = (
 
 
 class InterceptHandler(logging.Handler):
-    """BUG 10 FIX: Intercept stdlib logging and route to loguru."""
+    """Intercept stdlib logging and route to loguru."""
 
     def emit(self, record):
         try:
@@ -33,7 +32,10 @@ class InterceptHandler(logging.Handler):
 
 
 def setup_logging(log_level: str = "INFO", json_logs: bool = False):
-    """Configure loguru logging with rotation and stdlib interception."""
+    """Configure loguru logging with rotation and stdlib interception.
+
+    Free-tier mode: JSON logs enabled by default for rich schema tracking.
+    """
     logger.remove()
 
     if json_logs:
@@ -75,3 +77,65 @@ def setup_logging(log_level: str = "INFO", json_logs: bool = False):
 
     logger.info(f"Logging configured: level={log_level}, json={json_logs}")
     return logger
+
+
+def log_opportunity_entry(
+    timestamp: str,
+    block_number: int,
+    rpc_provider: str,
+    rpc_latency_ms: float,
+    estimated_cu_used: float,
+    route: dict,
+    borrow_amount_usd: float,
+    gross_profit_usd: float,
+    net_profit_usd: float,
+    net_after_25pct_buffer: float,
+    simulation_success: bool,
+    stress_test_passed: bool,
+    false_positive_flags: list,
+    free_tier_throttled: bool,
+):
+    """Log a full free-tier opportunity entry with enhanced schema (Section 11)."""
+    entry = {
+        "timestamp": timestamp,
+        "block_number": block_number,
+        "rpc_provider": rpc_provider,
+        "rpc_latency_ms": rpc_latency_ms,
+        "estimated_cu_used": estimated_cu_used,
+        "route": route,
+        "borrow_amount_usd": borrow_amount_usd,
+        "gross_profit_usd": gross_profit_usd,
+        "net_profit_usd": net_profit_usd,
+        "net_after_25pct_buffer": net_after_25pct_buffer,
+        "simulation_success": simulation_success,
+        "stress_test_passed": stress_test_passed,
+        "false_positive_flags": false_positive_flags,
+        "free_tier_throttled": free_tier_throttled,
+    }
+    logger.info(f"OPPORTUNITY_LOG: {entry}")
+    return entry
+
+
+def log_discard_entry(
+    timestamp: str,
+    block_number: int,
+    rpc_provider: str,
+    rpc_latency_ms: float,
+    estimated_cu_used: float,
+    route: dict,
+    reason: str,
+    free_tier_throttled: bool,
+):
+    """Log a discarded candidate (every simulation, even discards)."""
+    entry = {
+        "timestamp": timestamp,
+        "block_number": block_number,
+        "rpc_provider": rpc_provider,
+        "rpc_latency_ms": rpc_latency_ms,
+        "estimated_cu_used": estimated_cu_used,
+        "route": route,
+        "discard_reason": reason,
+        "free_tier_throttled": free_tier_throttled,
+    }
+    logger.debug(f"DISCARD_LOG: {entry}")
+    return entry

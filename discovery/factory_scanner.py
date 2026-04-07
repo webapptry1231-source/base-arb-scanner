@@ -22,6 +22,18 @@ FACTORY_V3_ABI = [
         "stateMutability": "view",
         "type": "function",
     },
+    {
+        "anonymous": False,
+        "inputs": [
+            {"indexed": True, "name": "token0", "type": "address"},
+            {"indexed": True, "name": "token1", "type": "address"},
+            {"indexed": True, "name": "fee", "type": "uint24"},
+            {"indexed": False, "name": "tickSpacing", "type": "int24"},
+            {"indexed": False, "name": "pool", "type": "address"}
+        ],
+        "name": "PoolCreated",
+        "type": "event"
+    },
 ]
 
 
@@ -31,43 +43,45 @@ async def discover_all_pairs_v3(
     batch_size: int = 200,
     dex_name: str = "unknown",
 ) -> List[Dict[str, Any]]:
-    """Scan all pools from a V3-style factory contract.
-
-    Uses batched multicall-friendly iteration over allPools.
-    Falls back to sequential calls if multicall is unavailable.
-    """
-    factory = w3.eth.contract(address=factory_addr, abi=FACTORY_V3_ABI)
+    """Improved discovery for Base V3 factories using events + poolCount fallback."""
     pools = []
-
+    factory = w3.eth.contract(address=factory_addr, abi=FACTORY_V3_ABI)
+    
     try:
+        # Try poolCount first
         pool_count = await factory.functions.poolCount().call()
         pool_count = int(pool_count)
         logger.info(f"[{dex_name}] Factory reports {pool_count} pools")
-    except Exception as e:
-        logger.error(f"[{dex_name}] Failed to get pool count from {factory_addr}: {e}")
-        return []
-
-    if pool_count == 0:
-        return []
-
-    for i in range(0, pool_count, batch_size):
-        batch_end = min(i + batch_size, pool_count)
-        logger.debug(f"[{dex_name}] Fetching pools {i} to {batch_end - 1}")
-
-        for j in range(i, batch_end):
-            try:
-                pool_address = await factory.functions.allPools(j).call()
+        
+        for i in range(0, min(pool_count, 500), batch_size):  # limit for speed
+            batch_end = min(i + batch_size, pool_count)
+            for j in range(i, batch_end):
+                try:
+                    pool_address = await factory.functions.allPools(j).call()
+                    pools.append({
+                        "address": pool_address,
+                        "dex": dex_name,
+                        "type": "v3",
+                    })
+                except Exception:
+                    continue
+    except Exception:
+        # Fallback to recent PoolCreated events
+        try:
+            events = await factory.events.PoolCreated.get_logs(fromBlock="latest-2000")
+            for event in events:
                 pools.append({
-                    "address": pool_address,
-                    "factory": factory_addr,
+                    "address": event.args.pool,
+                    "token0": event.args.token0,
+                    "token1": event.args.token1,
+                    "fee": getattr(event.args, 'fee', 3000) / 1_000_000,
                     "dex": dex_name,
-                    "index": j,
+                    "type": "v3",
                 })
-            except Exception as e:
-                logger.debug(f"[{dex_name}] Failed to fetch pool {j}: {e}")
-                continue
-
-    logger.info(f"[{dex_name}] Discovered {len(pools)} pools from factory {factory_addr}")
+            logger.info(f"[{dex_name}] Found {len(events)} pools via PoolCreated events")
+        except Exception as e:
+            logger.error(f"[{dex_name}] All discovery methods failed: {e}")
+    
     return pools
 
 
