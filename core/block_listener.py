@@ -62,23 +62,23 @@ class BlockListener:
             await self._listen_http_polling()
 
     async def _listen_websocket(self):
-        """Listen for new blocks via WebSocket subscription (fixed for web3.py v6)."""
+        """Modern web3.py 6.x subscription style."""
         ws_w3 = await self._rpc_manager.get_ws_w3()
 
         try:
-            # Correct web3.py v6 subscription pattern
-            subscription_id = await ws_w3.eth.subscribe("newHeads")
-            logger.info(f"WebSocket subscribed successfully with ID: {subscription_id}")
+            sub_id = await ws_w3.eth.subscribe("newHeads")
 
-            async for block_header in ws_w3.eth.get_subscription(subscription_id):
+            async for response in ws_w3.ws.process_subscriptions():
                 if not self._running:
                     break
+                if response.get("method") != "eth_subscription":
+                    continue
 
+                block_header = response["params"]["result"]
                 block_number = block_header.get("number")
                 if block_number is None:
                     continue
 
-                # Handle hex block number
                 block_number = int(block_number, 16) if isinstance(block_number, str) else block_number
 
                 if self._current_block is None or block_number > self._current_block:
@@ -89,6 +89,7 @@ class BlockListener:
         except Exception as e:
             logger.error(f"WebSocket subscription error: {e}")
             raise
+
     async def _listen_http_polling(self):
         """Poll for new blocks via HTTP (fallback)."""
         logger.info("Starting HTTP polling for new blocks")
