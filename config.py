@@ -4,38 +4,42 @@ from dotenv import load_dotenv
 load_dotenv()
 
 CONFIG = {
-    # RPC
-    "rpc_primary"   : os.getenv("RPC_PRIMARY", "https://rpc.ankr.com/base"),
-    "rpc_ws"        : os.getenv("RPC_WS", "wss://rpc.ankr.com/base/ws"),
-    "rpc_fallback"  : [
-        os.getenv("RPC_FALLBACK_1", "https://base.drpc.org"),
-        os.getenv("RPC_FALLBACK_2", "https://1rpc.io/base"),
+    # RPC — FREE-TIER MAX ROTATION
+    "rpc_primary": os.getenv("RPC_PRIMARY", "https://base.drpc.org"),
+    "rpc_ws_primary": os.getenv("RPC_WS_PRIMARY", "wss://base.drpc.org"),
+    "rpc_fallbacks": [
+        "https://base-mainnet.g.alchemy.com/v2/" + os.getenv("ALCHEMY_KEY", ""),
+        "https://rpc.ankr.com/base",
+        "https://1rpc.io/base",
     ],
+    "rpc_ws_fallbacks": [
+        "wss://base-mainnet.g.alchemy.com/v2/" + os.getenv("ALCHEMY_KEY", ""),
+    ],
+    "rpc_max_calls_sec": 20,          # dRPC safe limit
+    "multicall_batch": 80,            # REDUCED for free-tier safety
+    "scan_poll_interval_sec": 30,     # fallback if WS drops
 
-    # Scanner thresholds
-    "min_profit_usd"  : 0.50,
-    "min_pool_tvl_usd": 5_000,
+    # Scanner thresholds (tightened for free tier)
+    "min_profit_usd": 0.50,
+    "min_pool_tvl_usd": 10000,        # higher filter to reduce load
     "max_price_impact": 0.02,
-    "max_borrow_pct"  : 0.30,
+    "max_borrow_pct": 0.30,
     "gas_safety_buffer": 1.25,
+    "max_hops": 3,                    # start with 3 to reduce compute
 
-    # Scan limits
-    "max_hops"        : 4,
-    "multicall_batch" : 250,
-    "rpc_max_calls_sec": 20,
-
-    # Addresses
-    "multicall3"    : "0xcA11bde05977b3631167028862bE2a173976CA11",
+    # Addresses (exact)
+    "multicall3": "0xcA11bde05977b3631167028862bE2a173976CA11",
     "balancer_vault": "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
-    "aave_v3_pool"  : "0x794a61358D6845594F94dc1DB02A252b5b4814aD",
+    "aave_v3_pool": "0x794a61358D6845594F94dc1DB02A252b5b4814aD",
+
+    # Free-tier flags
+    "free_tier_mode": True,
+    "use_mempool_filter": False,
 
     # Alerts
     "telegram_alert_threshold_usd": 1.00,
-    "telegram_bot_token"  : os.getenv("TELEGRAM_BOT_TOKEN", ""),
-    "telegram_chat_id"    : os.getenv("TELEGRAM_CHAT_ID", ""),
-
-    # Subgraph
-    "graph_api_key": os.getenv("GRAPH_API_KEY", ""),
+    "telegram_bot_token": os.getenv("TELEGRAM_BOT_TOKEN", ""),
+    "telegram_chat_id": os.getenv("TELEGRAM_CHAT_ID", ""),
 }
 
 # Convenience constants (used throughout the codebase)
@@ -47,6 +51,7 @@ GAS_SAFETY_BUFFER = CONFIG["gas_safety_buffer"]
 MAX_HOPS = CONFIG["max_hops"]
 MULTICALL_BATCH = CONFIG["multicall_batch"]
 RPC_MAX_CALLS_SEC = CONFIG["rpc_max_calls_sec"]
+SCAN_POLL_INTERVAL_SEC = CONFIG["scan_poll_interval_sec"]
 
 # Core token addresses on Base
 WETH = "0x4200000000000000000000000000000000000006"
@@ -85,10 +90,32 @@ GAS_ESTIMATES = {
 DISCOVERY_INTERVAL_SEC = 300  # 5 minutes
 
 # Health check interval (seconds)
-HEALTH_CHECK_INTERVAL_SEC = 30
+HEALTH_CHECK_INTERVAL_SEC = 15  # free-tier: every 15 seconds
 
 # Database path
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "scanner.db")
 
 # CSV export path
 CSV_EXPORT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "opportunities.csv")
+
+# Pre-seeded known high-TVL pools for immediate scanner availability
+SEED_POOLS = [
+    {
+        "address": "0xd0b53D9277642d899DF5C87A3966A349A798F224",
+        "token0": WETH,
+        "token1": USDC,
+        "fee": 500,
+        "dex": "uniswap_v3",
+        "type": "v3",
+        "tvl_usd": 50_000_000,
+    },
+    {
+        "address": "0x4C36388bE6F416A29C8d8Eee81C771cE6bE14B18",
+        "token0": WETH,
+        "token1": USDC,
+        "fee": 3000,
+        "dex": "uniswap_v3",
+        "type": "v3",
+        "tvl_usd": 10_000_000,
+    },
+]

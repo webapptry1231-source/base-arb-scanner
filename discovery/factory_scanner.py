@@ -22,6 +22,18 @@ FACTORY_V3_ABI = [
         "stateMutability": "view",
         "type": "function",
     },
+    {
+        "anonymous": False,
+        "inputs": [
+            {"indexed": True, "name": "token0", "type": "address"},
+            {"indexed": True, "name": "token1", "type": "address"},
+            {"indexed": True, "name": "fee", "type": "uint24"},
+            {"indexed": False, "name": "tickSpacing", "type": "int24"},
+            {"indexed": False, "name": "pool", "type": "address"}
+        ],
+        "name": "PoolCreated",
+        "type": "event"
+    },
 ]
 
 

@@ -13,6 +13,7 @@ from config import (
     BALANCER_VAULT,
     MAJOR_TOKENS,
     MIN_POOL_TVL_USD,
+    SEED_POOLS,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,17 @@ class PoolRegistry:
         self._pools: Dict[str, Dict[str, Any]] = {}
         self._pool_addresses: Set[str] = set()
         self._dex_pools: Dict[str, List[Dict[str, Any]]] = {}
+        self._load_seed_pools()
+
+    def _load_seed_pools(self):
+        """Pre-load known high-TVL pools for immediate scanner availability."""
+        for pool in SEED_POOLS:
+            addr = pool["address"].lower()
+            if addr not in self._pool_addresses:
+                self._pool_addresses.add(addr)
+                self._pools[addr] = pool
+                logger.info(f"Pre-seeded pool: {addr} ({pool.get('dex', 'unknown')})")
+        logger.info(f"Loaded {len(SEED_POOLS)} seed pools")
 
     async def discover_pools(self, w3: AsyncWeb3) -> List[Dict[str, Any]]:
         """Run full pool discovery across all DEXs and return new pools."""

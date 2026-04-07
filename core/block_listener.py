@@ -2,10 +2,23 @@ import asyncio
 import logging
 from typing import Callable, Optional, Dict, Any
 from web3 import AsyncWeb3
+from web3.exceptions import BlockNotFound
 
-from config import CONFIG
+from config import CONFIG, SCAN_POLL_INTERVAL_SEC
 
 logger = logging.getLogger(__name__)
+
+
+async def safe_get_block(w3: AsyncWeb3, block_identifier, retries: int = 5):
+    """Safely fetch a block with exponential backoff for BlockNotFound errors."""
+    for attempt in range(retries):
+        try:
+            return await w3.eth.get_block(block_identifier)
+        except BlockNotFound:
+            if attempt == retries - 1:
+                raise
+            await asyncio.sleep(0.5 * (2 ** attempt))
+    return None
 
 
 class BlockListener:
@@ -17,7 +30,7 @@ class BlockListener:
         self._current_block: Optional[int] = None
         self._callbacks: list = []
         self._listener_task: Optional[asyncio.Task] = None
-        self._poll_interval: float = 2.0  # Base chain ~2s blocks
+        self._poll_interval: float = SCAN_POLL_INTERVAL_SEC  # free-tier: 30s fallback
 
     def on_new_block(self, callback: Callable):
         """Register a callback for new block events."""
@@ -89,7 +102,9 @@ class BlockListener:
                     self._current_block = block_number
                     logger.debug(f"New block detected via HTTP poll: #{block_number}")
 
-                    block = await w3.eth.get_block(block_number)
+                    block = await safe_get_block(w3, block_number)
+                    if block is None:
+                        continue
                     block_header = {
                         "number": block_number,
                         "hash": block["hash"].hex() if isinstance(block["hash"], bytes) else block["hash"],

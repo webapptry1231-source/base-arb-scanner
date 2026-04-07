@@ -7,7 +7,7 @@ from typing import Optional
 from config import CONFIG
 from data.logger import setup_logging
 from core.rpc_manager import RPCManager
-from core.block_listener import BlockListener
+from core.block_listener import BlockListener, safe_get_block
 from core.scanner import ScannerEngine
 from core.opportunity import OpportunityEngine
 from discovery.pool_registry import PoolRegistry
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 async def make_flashloan_checker(balancer_fl, aave_fl):
-    """BUG 2 & 12 FIX: Factory that returns a clean async flashloan checker callable.
+    """Factory that returns a clean async flashloan checker callable.
 
     Returns an async function: async def check(token, amount) -> Optional[dict]
     """
@@ -48,7 +48,7 @@ async def make_flashloan_checker(balancer_fl, aave_fl):
 
 
 class BaseArbScanner:
-    """Main orchestrator for the Base chain flash-loan arbitrage scanner."""
+    """Main orchestrator for the Base chain flash-loan arbitrage scanner (free-tier v1.2)."""
 
     def __init__(self):
         self._setup_logging()
@@ -74,7 +74,7 @@ class BaseArbScanner:
 
     async def initialize(self):
         """Initialize all components."""
-        logger.info("Initializing BaseArbScanner...")
+        logger.info("Initializing BaseArbScanner (free-tier v1.2)...")
 
         await self._database.initialize()
 
@@ -85,7 +85,7 @@ class BaseArbScanner:
         self._aave_fl = AaveV3FlashLoan(w3)
 
         try:
-            block = await w3.eth.get_block("latest")
+            block = await safe_get_block(w3, "latest")
             base_fee = block.get("baseFeePerGas", 0)
             gas_price_gwei = (base_fee / 1e9) if base_fee else 0.1
             eth_price_usd = 3000.0
@@ -110,13 +110,14 @@ class BaseArbScanner:
             profit_calculator=self._profit_calculator,
             database=self._database,
             dashboard=self._dashboard,
+            stats_tracker=self._stats_tracker,
         )
 
         logger.info("All components initialized")
 
     async def start(self):
         """Start the scanner."""
-        logger.info("Starting BaseArbScanner...")
+        logger.info("Starting BaseArbScanner (free-tier v1.2)...")
         await self.initialize()
         await self._scanner.start()
 
