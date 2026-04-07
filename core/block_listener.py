@@ -49,11 +49,10 @@ class BlockListener:
             await self._listen_http_polling()
 
     async def _listen_websocket(self):
-        """Listen for new blocks via WebSocket subscription."""
-        ws_w3 = await self._rpc_manager.get_ws_w3()
-
-        try:
-            async for block_header in ws_w3.eth.subscribe("newHeads"):
+    ws_w3 = await self._rpc_manager.get_ws_w3()
+    subscription = await ws_w3.eth.subscribe("newHeads")   # <-- this was the bug
+    try:
+        async for block_header in subscription:
                 if not self._running:
                     break
 
