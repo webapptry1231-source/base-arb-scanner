@@ -1,8 +1,9 @@
 import asyncio
 import time
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
 from web3 import AsyncWeb3
+from web3.providers import AsyncWebSocketProvider
 from web3.providers.async_rpc import AsyncHTTPProvider
 from config import CONFIG, HEALTH_CHECK_INTERVAL_SEC, RPC_MAX_CALLS_SEC
 
@@ -230,8 +231,7 @@ class RPCManager:
             if not ws_endpoint:
                 continue
             try:
-                from web3.providers.websocket import WebSocketProvider
-                self._ws_w3 = AsyncWeb3(WebSocketProvider(ws_endpoint))
+                self._ws_w3 = AsyncWeb3(AsyncWebSocketProvider(ws_endpoint))
                 self._ws_current_index = i
                 logger.info(f"Connected to WebSocket RPC: {ws_endpoint}")
                 return self._ws_w3
